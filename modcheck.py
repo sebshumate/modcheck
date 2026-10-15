@@ -83,6 +83,10 @@ def check_update(mod, mc_version):
         return None
     return response.json()
 
+def project_name(project_id):
+    url = f"https://api.modrinth.com/v2/project/{project_id}"
+    return requests.get(url, headers=HEADERS).json().get("title", project_id)
+
 # Main program 
 
 parser = argparse.ArgumentParser(description="Check a Minecraft mods folder for updates")
@@ -98,6 +102,9 @@ if not folder.exists():
 jars = list(folder.glob("*.jar"))
 print("Found", len(jars), "mods")
 
+installed = set()
+required = set()
+
 for jar in jars:
     mod = read_mod(jar)
     result = lookup(mod.sha1)
@@ -105,7 +112,12 @@ for jar in jars:
         print(mod.name, "-> not on Modrinth")
     else:
         print(mod.name, "->", result["version_number"], result["game_versions"])
-    latest = check_update(mod,args.mc)
+        installed.add(result["project_id"])
+        for dep in result["dependencies"]:
+            if dep["dependency_type"] == "required" and dep["project_id"]:
+                required.add(dep["project_id"])
+
+    latest = check_update(mod, args.mc)
     if latest is None:
         print("  No version for", args.mc)
     elif args.mc not in result["game_versions"]:
@@ -114,5 +126,10 @@ for jar in jars:
         print("  Up to date")
     else:
         print("  UPDATE:", result["version_number"], "->", latest["version_number"])
+    print()
+
+missing = required - installed
+for project_id in missing:
+    print("MISSING DEPENDENCY:", project_name(project_id))
     
     print()
