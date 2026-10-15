@@ -2,6 +2,8 @@ import sys
 import json
 import tomllib
 import zipfile
+import hashlib
+import requests
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -13,13 +15,14 @@ class ModInfo:
     name: str = "Unknown"
     version: str = "Unknown"
     minecraft: str = "Unknown"
+    sha1: str = ""
 
 
 def read_mod(jar):
     with zipfile.ZipFile(jar) as z:
         names = z.namelist()
 
-        #Figure out which loaders this jar supports
+        # Figure out which loaders this jar supports
         loaders = []
         if "fabric.mod.json" in names:
             loaders.append("fabric")
@@ -31,6 +34,7 @@ def read_mod(jar):
             loaders.append("unknown")
 
         mod = ModInfo(file=jar.name, loaders=loaders)
+        mod.sha1 = hashlib.sha1(jar.read_bytes()).hexdigest()
 
         # Fabric mods: read fabric.mod.json
         if "fabric.mod.json" in names:
@@ -51,7 +55,7 @@ def read_mod(jar):
             entry = info["mods"][0]
             mod.name = entry.get("displayName")
             mod.version = entry.get("version")
-            
+
             mod_id = entry.get("modId")
             for dep in info.get("dependencies", {}).get(mod_id, []):
                 if dep.get("modId") == "minecraft":
@@ -59,6 +63,19 @@ def read_mod(jar):
 
     return mod
 
+
+HEADERS = {"User-Agent": "sebshumate/modcheck/0.1 (github.com/sebshumate/modcheck)"}
+
+
+def lookup(sha1):
+    url = f"https://api.modrinth.com/v2/version_file/{sha1}?algorithm=sha1"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code == 404:
+        return None
+    return response.json()
+
+
+# Main program 
 
 folder = Path(sys.argv[1])
 if not folder.exists():
@@ -70,4 +87,8 @@ print("Found", len(jars), "mods")
 
 for jar in jars:
     mod = read_mod(jar)
-    print(mod)
+    result = lookup(mod.sha1)
+    if result is None:
+        print(mod.name, "-> not on Modrinth")
+    else:
+        print(mod.name, "->", result["version_number"], result["game_versions"])
