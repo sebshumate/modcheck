@@ -74,6 +74,15 @@ def lookup(sha1):
         return None
     return response.json()
 
+MC_VERSION = "26.3"
+
+def check_update(mod):
+    url = f"https://api.modrinth.com/v2/version_file/{mod.sha1}/update?algorithm=sha1"
+    body = {"loaders": mod.loaders, "game_versions": [MC_VERSION]}
+    response = requests.post(url, json=body, headers=HEADERS)
+    if response.status_code == 404:
+        return None
+    return response.json()
 
 # Main program 
 
@@ -92,3 +101,10 @@ for jar in jars:
         print(mod.name, "-> not on Modrinth")
     else:
         print(mod.name, "->", result["version_number"], result["game_versions"])
+    latest = check_update(mod)
+    if latest is None:
+        print("  No version for", MC_VERSION)
+    elif latest["version_number"] == result["version_number"]:
+        print("  Up to date")
+    else:
+        print("  UPDATE:", result["version_number"], "->", latest["version_number"])
