@@ -6,6 +6,7 @@ import hashlib
 import requests
 from pathlib import Path
 from dataclasses import dataclass
+import argparse
 
 
 @dataclass
@@ -74,11 +75,9 @@ def lookup(sha1):
         return None
     return response.json()
 
-MC_VERSION = "26.3"
-
-def check_update(mod):
+def check_update(mod, mc_version):
     url = f"https://api.modrinth.com/v2/version_file/{mod.sha1}/update?algorithm=sha1"
-    body = {"loaders": mod.loaders, "game_versions": [MC_VERSION]}
+    body = {"loaders": mod.loaders, "game_versions": [mc_version]}
     response = requests.post(url, json=body, headers=HEADERS)
     if response.status_code == 404:
         return None
@@ -86,7 +85,12 @@ def check_update(mod):
 
 # Main program 
 
-folder = Path(sys.argv[1])
+parser = argparse.ArgumentParser(description="Check a Minecraft mods folder for updates")
+parser.add_argument("folder", help="path to your mods folder")
+parser.add_argument("--mc", default="26.3", help="Minecraft version, e.g. 1.21.1")
+args = parser.parse_args()
+
+folder = Path(args.folder)
 if not folder.exists():
     print(f"Folder {folder} does not exist")
     sys.exit(1)
@@ -101,10 +105,14 @@ for jar in jars:
         print(mod.name, "-> not on Modrinth")
     else:
         print(mod.name, "->", result["version_number"], result["game_versions"])
-    latest = check_update(mod)
+    latest = check_update(mod,args.mc)
     if latest is None:
-        print("  No version for", MC_VERSION)
+        print("  No version for", args.mc)
+    elif args.mc not in result["game_versions"]:
+        print("  WRONG GAME VERSION: built for", result["game_versions"], "-> get", latest["version_number"])
     elif latest["version_number"] == result["version_number"]:
         print("  Up to date")
     else:
         print("  UPDATE:", result["version_number"], "->", latest["version_number"])
+    
+    print()
